@@ -750,6 +750,7 @@ static int merge_working_tree(const struct checkout_opts *opts,
 		refresh_cache(REFRESH_QUIET);
 
 		if (unmerged_cache()) {
+			clear_unpack_trees_porcelain(&topts);
 			error(_("you need to resolve your current index first"));
 			return 1;
 		}

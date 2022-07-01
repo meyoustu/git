@@ -79,6 +79,7 @@ static int stream_blob(const struct object_id *oid)
 static int cat_one_file(int opt, const char *exp_type, const char *obj_name,
 			int unknown_type)
 {
+	int ret;
 	struct object_id oid;
 	enum object_type type;
 	char *buf;
@@ -114,7 +115,8 @@ static int cat_one_file(int opt, const char *exp_type, const char *obj_name,
 		if (sb.len) {
 			printf("%s\n", sb.buf);
 			strbuf_release(&sb);
-			return 0;
+			ret = 0;
+			goto cleanup;
 		}
 		break;
 
@@ -123,7 +125,8 @@ static int cat_one_file(int opt, const char *exp_type, const char *obj_name,
 		if (oid_object_info_extended(the_repository, &oid, &oi, flags) < 0)
 			die("git cat-file: could not get object info");
 		printf("%"PRIuMAX"\n", (uintmax_t)size);
-		return 0;
+		ret = 0;
+		goto cleanup;
 
 	case 'e':
 		return !has_object_file(&oid);
@@ -131,8 +134,10 @@ static int cat_one_file(int opt, const char *exp_type, const char *obj_name,
 	case 'w':
 
 		if (filter_object(path, obj_context.mode,
-				  &oid, &buf, &size))
-			return -1;
+				  &oid, &buf, &size)) {
+			ret = -1;
+			goto cleanup;
+		}
 		break;
 
 	case 'c':
@@ -151,11 +156,14 @@ static int cat_one_file(int opt, const char *exp_type, const char *obj_name,
 			const char *ls_args[3] = { NULL };
 			ls_args[0] =  "ls-tree";
 			ls_args[1] =  obj_name;
-			return cmd_ls_tree(2, ls_args, NULL);
+			ret = cmd_ls_tree(2, ls_args, NULL);
+			goto cleanup;
 		}
 
-		if (type == OBJ_BLOB)
-			return stream_blob(&oid);
+		if (type == OBJ_BLOB) {
+			ret = stream_blob(&oid);
+			goto cleanup;
+		}
 		buf = read_object_file(&oid, &type, &size);
 		if (!buf)
 			die("Cannot read object %s", obj_name);
@@ -180,8 +188,10 @@ static int cat_one_file(int opt, const char *exp_type, const char *obj_name,
 			} else
 				oidcpy(&blob_oid, &oid);
 
-			if (oid_object_info(the_repository, &blob_oid, NULL) == OBJ_BLOB)
-				return stream_blob(&blob_oid);
+			if (oid_object_info(the_repository, &blob_oid, NULL) == OBJ_BLOB) {
+				ret = stream_blob(&blob_oid);
+				goto cleanup;
+			}
 			/*
 			 * we attempted to dereference a tag to a blob
 			 * and failed; there may be new dereference
@@ -201,9 +211,11 @@ static int cat_one_file(int opt, const char *exp_type, const char *obj_name,
 		die("git cat-file %s: bad file", obj_name);
 
 	write_or_die(1, buf, size);
+	ret = 0;
+cleanup:
 	free(buf);
 	free(obj_context.path);
-	return 0;
+	return ret;
 }
 
 struct expand_data {
@@ -780,6 +792,7 @@ static void batch_objects_command(struct batch_options *opt,
 		free_cmds(queued_cmd, &nr);
 	}
 
+	free_cmds(queued_cmd, &nr);
 	free(queued_cmd);
 	strbuf_release(&input);
 }
